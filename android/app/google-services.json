@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "691811953242",
+    "project_id": "mainproject-213b5",
+    "storage_bucket": "mainproject-213b5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:691811953242:android:bf98596b0e0e9c0aaa0663",
+        "android_client_info": {
+          "package_name": "com.example.bantay_pamilya"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQGCOdTnepi0PJtYbxOj_m8gAfbBinuC4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:691811953242:android:8bf60385f069a87caa0663",
+        "android_client_info": {
+          "package_name": "com.example.madex"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQGCOdTnepi0PJtYbxOj_m8gAfbBinuC4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
