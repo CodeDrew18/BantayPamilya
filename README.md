@@ -1,16 +1,23 @@
-# bantay_pamilya
+# BantayPamilya
 
-A new Flutter project.
+**BantayPamilya** is a mobile-based family safety application developed using Flutter. It is designed to provide real-time location tracking and device monitoring to help families stay connected and ensure the safety of their members. The system emphasizes secure, transparent, and consent-based monitoring.
+
+## Features
+- Real-time location tracking  
+- Smart alerts and notifications  
+- Device activity monitoring  
+- Family member connectivity  
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+This project serves as a foundational implementation of a family monitoring system using Flutter.
 
-A few resources to get you started if this is your first Flutter project:
+### Prerequisites
+- Flutter SDK  
+- Android Studio or Visual Studio Code  
+- Android device or emulator  
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### Installation
+1. Clone the repository:
+```bash
+git clone https://github.com/your-username/bantay_pamilya.git
