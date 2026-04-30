@@ -10,15 +10,15 @@ class SplashScreen extends StatelessWidget {
     return Scaffold(
       body: Center(
         child: FlutterSplashScreen.gif(
-            backgroundColor: Color(0xFFF5F6F0),
-            useImmersiveMode: true,
-            gifPath: 'assets/splashscreen.gif',
-            gifWidth: 900,
-            gifHeight: 900,
-            nextScreen: const RegisterScreen(),
-            duration: const Duration(seconds: 7),
-          ),
-      )
+          backgroundColor: Color(0xFFF5F6F0),
+          useImmersiveMode: true,
+          gifPath: 'assets/splashscreen.gif',
+          gifWidth: 900,
+          gifHeight: 900,
+          nextScreen: const RegisterScreen(),
+          duration: const Duration(seconds: 7),
+        ),
+      ),
     );
   }
 }

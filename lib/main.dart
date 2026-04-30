@@ -5,9 +5,7 @@ import 'package:flutter/material.dart';
 
 void main() async {
   runApp(Main());
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-);
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
 
 class Main extends StatelessWidget {
@@ -15,9 +13,6 @@ class Main extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: SplashScreen(),
-      debugShowCheckedModeBanner: false,
-    );
+    return MaterialApp(home: SplashScreen(), debugShowCheckedModeBanner: false);
   }
 }
