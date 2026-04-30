@@ -17,7 +17,11 @@ This project serves as a foundational implementation of a family monitoring syst
 - Android Studio or Visual Studio Code  
 - Android device or emulator  
 
+### License
+This project is licensed under the MIT License - see the LICENSE file for details.
+
 ### Installation
 1. Clone the repository:
 ```bash
 git clone https://github.com/your-username/bantay_pamilya.git
+
