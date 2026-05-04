@@ -15,25 +15,39 @@ final emailController = TextEditingController();
 final passwordController = TextEditingController();
 final confirmPasswordController = TextEditingController();
 
-void registerUser(BuildContext context, String email, String password) async {
+Future<bool> registerUser(
+  BuildContext context,
+  String email,
+  String password,
+) async {
   try {
     await FirebaseAuth.instance.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
-    QuickAlert.show(
+    await QuickAlert.show(
       context: context,
       type: QuickAlertType.success,
       title: 'Success',
       text: 'Your account has been created successfully',
     );
+    return true;
+  } on FirebaseAuthException catch (e) {
+    await QuickAlert.show(
+      context: context,
+      type: QuickAlertType.error,
+      title: 'Error',
+      text: e.message ?? e.code,
+    );
+    return false;
   } catch (e) {
-    QuickAlert.show(
+    await QuickAlert.show(
       context: context,
       type: QuickAlertType.error,
       title: 'Error',
       text: e.toString(),
     );
+    return false;
   }
 }
 
@@ -127,7 +141,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -152,22 +166,11 @@ class _RegisterScreenState extends State<RegisterScreen>
                               ),
                             ),
                             Align(
-                              alignment: Alignment.center,
+                              alignment: Alignment.bottomCenter,
                               child: Image.asset(
                                 'assets/register.png',
                                 height: 500,
                                 fit: BoxFit.contain,
-                              ),
-                            ),
-                            const Text(
-                              "Bantay Pamilya",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: brandDark,
-                                fontSize: 38,
-                                fontWeight: FontWeight.w800,
-                                fontFamily: 'Poppins',
-                                letterSpacing: 0.5,
                               ),
                             ),
                           ],
@@ -175,14 +178,25 @@ class _RegisterScreenState extends State<RegisterScreen>
                       ),
                     ),
                   ),
-
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Bantay Pamilya',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: brandDark,
+                      fontSize: 38,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Poppins',
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   FadeTransition(
                     opacity: _subtitleFade,
                     child: SlideTransition(
                       position: _subtitleSlide,
                       child: const Text(
-                        "Create your account to get started",
+                        'Create your account to get started',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: brandMuted,
@@ -202,10 +216,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0x140F2A43)),
+                          border: Border.all(color: const Color(0x140E2A47)),
                           boxShadow: const [
                             BoxShadow(
-                              color: Color(0x1A0F2A43),
+                              color: Color(0x1A0E2A47),
                               blurRadius: 20,
                               offset: Offset(0, 10),
                             ),
@@ -366,13 +380,19 @@ class _RegisterScreenState extends State<RegisterScreen>
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () {
+                          onPressed: () async {
                             if (formKey.currentState!.validate()) {
-                              registerUser(
+                              final success = await registerUser(
                                 context,
                                 emailController.text,
                                 passwordController.text,
                               );
+                              if (!mounted || !success) {
+                                return;
+                              }
+                              Navigator.of(
+                                context,
+                              ).pushReplacementNamed('/dashboard');
                             }
                           },
                           style: ElevatedButton.styleFrom(
@@ -399,7 +419,28 @@ class _RegisterScreenState extends State<RegisterScreen>
                       ),
                     ),
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Already have an account?',
+                        style: TextStyle(color: brandMuted),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pushNamed('/login');
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: brandAccent,
+                        ),
+                        child: const Text(
+                          'Sign in',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

@@ -3,8 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:quickalert/quickalert.dart';
 
-import 'register_screen.dart';
-
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -16,25 +14,39 @@ final formKey = GlobalKey<FormState>();
 final emailController = TextEditingController();
 final passwordController = TextEditingController();
 
-void loginUser(BuildContext context, String email, String password) async {
+Future<bool> loginUser(
+  BuildContext context,
+  String email,
+  String password,
+) async {
   try {
     await FirebaseAuth.instance.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
-    QuickAlert.show(
+    await QuickAlert.show(
       context: context,
       type: QuickAlertType.success,
       title: 'Welcome back',
       text: 'You are now signed in',
     );
+    return true;
+  } on FirebaseAuthException catch (e) {
+    await QuickAlert.show(
+      context: context,
+      type: QuickAlertType.error,
+      title: 'Error',
+      text: e.message ?? e.code,
+    );
+    return false;
   } catch (e) {
-    QuickAlert.show(
+    await QuickAlert.show(
       context: context,
       type: QuickAlertType.error,
       title: 'Error',
       text: e.toString(),
     );
+    return false;
   }
 }
 
@@ -339,7 +351,8 @@ class _LoginScreenState extends State<LoginScreen>
                                         context: context,
                                         type: QuickAlertType.error,
                                         title: 'Email required',
-                                        text: 'Enter your email to reset password',
+                                        text:
+                                            'Enter your email to reset password',
                                       );
                                       return;
                                     }
@@ -363,7 +376,9 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                   child: const Text(
                                     'Forgot password?',
-                                    style: TextStyle(fontWeight: FontWeight.w600),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -381,13 +396,19 @@ class _LoginScreenState extends State<LoginScreen>
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () {
+                          onPressed: () async {
                             if (formKey.currentState!.validate()) {
-                              loginUser(
+                              final success = await loginUser(
                                 context,
                                 emailController.text,
                                 passwordController.text,
                               );
+                              if (!mounted || !success) {
+                                return;
+                              }
+                              Navigator.of(
+                                context,
+                              ).pushReplacementNamed('/dashboard');
                             }
                           },
                           style: ElevatedButton.styleFrom(
@@ -419,16 +440,12 @@ class _LoginScreenState extends State<LoginScreen>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Text(
-                        'New here?',
+                        "Don't have an account?",
                         style: TextStyle(color: brandMuted),
                       ),
                       TextButton(
                         onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const RegisterScreen(),
-                            ),
-                          );
+                          Navigator.of(context).pushNamed('/register');
                         },
                         style: TextButton.styleFrom(
                           foregroundColor: brandAccent,
