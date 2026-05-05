@@ -1,5 +1,5 @@
 import 'package:another_flutter_splash_screen/another_flutter_splash_screen.dart';
-import 'package:bantay_pamilya/auth/register_screen.dart';
+import 'package:bantay_pamilya/auth/login_screen.dart';
 import 'package:flutter/material.dart';
 
 class SplashScreen extends StatelessWidget {
@@ -15,7 +15,7 @@ class SplashScreen extends StatelessWidget {
           gifPath: 'assets/splashscreen.gif',
           gifWidth: 900,
           gifHeight: 900,
-          nextScreen: const RegisterScreen(),
+          nextScreen: const LoginScreen(),
           duration: const Duration(seconds: 7),
         ),
       ),

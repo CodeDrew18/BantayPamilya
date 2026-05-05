@@ -30,10 +30,7 @@ class DashboardScreen extends StatelessWidget {
           SafeArea(
             child: Column(
               children: [
-                _TopAppBar(
-                  title: 'BantayPamilya',
-                  iconColor: brandDark,
-                ),
+                _TopAppBar(title: 'BantayPamilya', iconColor: brandDark),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(24, 16, 24, 96),
@@ -54,6 +51,7 @@ class DashboardScreen extends StatelessWidget {
                                 icon: Icons.sos,
                                 background: errorRed,
                                 shadow: errorRed.withOpacity(0.2),
+                                onPressed: () {},
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -63,6 +61,9 @@ class DashboardScreen extends StatelessWidget {
                                 icon: Icons.map,
                                 background: brandDark,
                                 shadow: brandDark.withOpacity(0.2),
+                                onPressed: () {
+                                  Navigator.of(context).pushNamed('/map');
+                                },
                               ),
                             ),
                           ],
@@ -129,10 +130,7 @@ class DashboardScreen extends StatelessWidget {
                           accent: brandDark,
                         ),
                         const SizedBox(height: 8),
-                        Container(
-                          height: 1,
-                          color: surfaceHigh,
-                        ),
+                        Container(height: 1, color: surfaceHigh),
                       ],
                     ),
                   ),
@@ -152,10 +150,7 @@ class DashboardScreen extends StatelessWidget {
 }
 
 class _TopAppBar extends StatelessWidget {
-  const _TopAppBar({
-    required this.title,
-    required this.iconColor,
-  });
+  const _TopAppBar({required this.title, required this.iconColor});
 
   final String title;
   final Color iconColor;
@@ -283,12 +278,14 @@ class _ActionButton extends StatelessWidget {
     required this.icon,
     required this.background,
     required this.shadow,
+    required this.onPressed,
   });
 
   final String label;
   final IconData icon;
   final Color background;
   final Color shadow;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -297,15 +294,11 @@ class _ActionButton extends StatelessWidget {
         color: background,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: shadow,
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
+          BoxShadow(color: shadow, blurRadius: 16, offset: const Offset(0, 6)),
         ],
       ),
       child: TextButton(
-        onPressed: () {},
+        onPressed: onPressed,
         style: TextButton.styleFrom(
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
@@ -318,10 +311,7 @@ class _ActionButton extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: Colors.white),
             const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -381,10 +371,7 @@ class _HeroCard extends StatelessWidget {
                   color: Colors.white.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.qr_code_scanner,
-                  color: Colors.white,
-                ),
+                child: const Icon(Icons.qr_code_scanner, color: Colors.white),
               ),
               const SizedBox(height: 12),
               Text(
@@ -410,8 +397,10 @@ class _HeroCard extends StatelessWidget {
                 style: TextButton.styleFrom(
                   backgroundColor: accent,
                   foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(999),
                   ),
@@ -547,9 +536,7 @@ class _BottomNavBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        border: Border(
-          top: BorderSide(color: Colors.black.withOpacity(0.04)),
-        ),
+        border: Border(top: BorderSide(color: Colors.black.withOpacity(0.04))),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF1A365D).withOpacity(0.08),
@@ -604,11 +591,7 @@ class _NavItem extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          icon,
-          color: isActive ? color : (highlight ?? color),
-          size: 24,
-        ),
+        Icon(icon, color: isActive ? color : (highlight ?? color), size: 24),
         const SizedBox(height: 4),
         Text(
           label,
