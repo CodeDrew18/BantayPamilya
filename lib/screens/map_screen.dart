@@ -242,6 +242,85 @@ Future<void> _updateAddress(double lat, double lng) async {
     return null;
   }
 
+  Future<Map<String, LatLng>> _loadFallbackLocations(List<String> ids) async {
+    final fallback = <String, LatLng>{};
+    if (ids.isEmpty) {
+      return fallback;
+    }
+
+    const chunkSize = 10;
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final end = (i + chunkSize < ids.length) ? i + chunkSize : ids.length;
+      final chunk = ids.sublist(i, end);
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('devices')
+              .where(FieldPath.documentId, whereIn: chunk)
+              .get();
+      for (final doc in snapshot.docs) {
+        final latLng = _latLngFrom(doc.data()['lastLocation']);
+        if (latLng != null) {
+          fallback[doc.id] = latLng;
+        }
+      }
+    }
+
+    return fallback;
+  }
+
+  Future<Set<Marker>> _buildPairedMarkers(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    Set<Marker> baseMarkers,
+  ) async {
+    final allMarkers = <Marker>{}..addAll(baseMarkers);
+    final missingLocationIds = <String>[];
+    for (final doc in docs) {
+      final data = doc.data();
+      final latLng = _latLngFrom(data['lastLocation']);
+      if (latLng == null) {
+        missingLocationIds.add(doc.id);
+        continue;
+      }
+      allMarkers.add(
+        Marker(
+          markerId: MarkerId(doc.id),
+          position: latLng,
+          infoWindow: InfoWindow(
+            title: (data['label'] as String?) ?? 'Paired device',
+            snippet: (data['isOnline'] == true) ? 'Online' : 'Offline',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
+    }
+
+    if (missingLocationIds.isEmpty) {
+      return allMarkers;
+    }
+
+    final fallbackLocations = await _loadFallbackLocations(missingLocationIds);
+    for (final doc in docs) {
+      final data = doc.data();
+      final latLng = fallbackLocations[doc.id];
+      if (latLng == null) {
+        continue;
+      }
+      allMarkers.add(
+        Marker(
+          markerId: MarkerId(doc.id),
+          position: latLng,
+          infoWindow: InfoWindow(
+            title: (data['label'] as String?) ?? 'Paired device',
+            snippet: (data['isOnline'] == true) ? 'Online' : 'Offline',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
+    }
+
+    return allMarkers;
+  }
+
   Widget _buildMap(Set<Marker> markers, LatLng initialTarget) {
     return GoogleMap(
       initialCameraPosition: CameraPosition(target: initialTarget, zoom: 15),
@@ -323,32 +402,14 @@ Future<void> _updateAddress(double lat, double lng) async {
       mapWidget = StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: pairedStream,
         builder: (context, snapshot) {
-          final allMarkers = <Marker>{}..addAll(markers);
-          for (final doc in snapshot.data?.docs ?? []) {
-            final data = doc.data();
-            final latLng = _latLngFrom(data['lastLocation']);
-            if (latLng == null) {
-              continue;
-            }
-            allMarkers.add(
-              Marker(
-                markerId: MarkerId(doc.id),
-                position: latLng,
-                infoWindow: InfoWindow(
-                  title: (data['label'] as String?) ?? 'Paired device',
-                  snippet: (data['isOnline'] == true) ? 'Online' : 'Offline',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueRed,
-                ),
-              ),
-            );
-          }
-
-          if (allMarkers.length == markers.length) {
-            return _buildMap(markers, initialTarget);
-          }
-          return _buildMap(allMarkers, initialTarget);
+          final docs = snapshot.data?.docs ?? const [];
+          return FutureBuilder<Set<Marker>>(
+            future: _buildPairedMarkers(docs, markers),
+            builder: (context, markerSnapshot) {
+              final allMarkers = markerSnapshot.data ?? markers;
+              return _buildMap(allMarkers, initialTarget);
+            },
+          );
         },
       );
     }

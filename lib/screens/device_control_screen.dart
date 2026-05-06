@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../widgets/network_status_banner.dart';
+import 'logs_screen.dart';
 
 class DeviceControlScreen extends StatefulWidget {
   const DeviceControlScreen({
@@ -257,6 +259,201 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     limitController.dispose();
   }
 
+  Future<void> _requestChildAppSync() async {
+    if (_isOffline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Go online to request app sync.')),
+      );
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('children')
+          .doc(widget.deviceUid)
+          .set({
+            'syncAppsRequestedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sync request sent to child device.')),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to send sync request right now.')),
+      );
+    }
+  }
+
+  Future<void> _requestChildLogsSync() async {
+    if (_isOffline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Go online to request logs sync.')),
+      );
+      return;
+    }
+    await FirebaseFirestore.instance
+        .collection('children')
+        .doc(widget.deviceUid)
+        .set({
+          'syncLogsRequestedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Logs sync requested.')),
+    );
+  }
+
+  Future<void> _setLockState(bool isLocked) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('children')
+          .doc(widget.deviceUid)
+          .set({
+            'is_locked': isLocked,
+            'updatedAt': FieldValue.serverTimestamp(),
+            if (!isLocked) 'lock_reason': FieldValue.delete(),
+          }, SetOptions(merge: true));
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to update lock state.')),
+      );
+    }
+  }
+
+  Future<void> _editDailyScreenTimeLimit(int? currentLimit) async {
+    final controller = TextEditingController(text: currentLimit?.toString() ?? '');
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Daily screen time limit (minutes)',
+                  filled: true,
+                  fillColor: const Color(0xFFF2F6FB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Save'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (updated != true) {
+      controller.dispose();
+      return;
+    }
+    final text = controller.text.trim();
+    final ref =
+        FirebaseFirestore.instance.collection('children').doc(widget.deviceUid);
+    if (text.isEmpty) {
+      await ref.set({
+        'daily_screen_limit_minutes': FieldValue.delete(),
+      }, SetOptions(merge: true));
+    } else {
+      final parsed = int.tryParse(text);
+      if (parsed != null) {
+        await ref.set({
+          'daily_screen_limit_minutes': parsed,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    }
+    controller.dispose();
+  }
+
+  Future<void> _setGeofenceFromChildLocation(
+    DocumentSnapshot<Map<String, dynamic>> snapshot,
+  ) async {
+    final point = snapshot.data()?['lastLocation'];
+    if (point is! GeoPoint) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No child location available yet.')),
+      );
+      return;
+    }
+    await FirebaseFirestore.instance.collection('children').doc(widget.deviceUid).set({
+      'geofence': {
+        'enabled': true,
+        'center': point,
+        'radiusMeters': 200,
+        'mode': 'child',
+      },
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> _setGeofenceAroundParent() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+    final parentDevice = await FirebaseFirestore.instance
+        .collection('devices')
+        .doc(user.uid)
+        .get();
+    final point = parentDevice.data()?['lastLocation'];
+    if (point is! GeoPoint) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No parent location found on map yet.')),
+      );
+      return;
+    }
+    await FirebaseFirestore.instance.collection('children').doc(widget.deviceUid).set({
+      'geofence': {
+        'enabled': true,
+        'center': point,
+        'radiusMeters': 200,
+        'mode': 'parent',
+      },
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   List<_InstalledApp> _parseInstalledApps(List<dynamic>? raw) {
     final apps = <_InstalledApp>[];
     for (final item in raw ?? const []) {
@@ -310,6 +507,122 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: childStream,
+                    builder: (context, snapshot) {
+                      final isLocked = snapshot.data?.data()?['is_locked'] == true;
+                      final limit =
+                          (snapshot.data?.data()?['daily_screen_limit_minutes'] as num?)
+                              ?.toInt();
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.black.withOpacity(0.04)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Lock child phone',
+                                  style: GoogleFonts.manrope(
+                                    fontWeight: FontWeight.w700,
+                                    color: brandDark,
+                                  ),
+                                ),
+                                Switch(
+                                  value: isLocked,
+                                  onChanged: _setLockState,
+                                  activeColor: const Color(0xFFBA1A1A),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: () => _editDailyScreenTimeLimit(limit),
+                            icon: const Icon(Icons.screen_lock_portrait),
+                            label: Text(
+                              limit == null
+                                  ? 'Set daily screen time'
+                                  : 'Edit daily screen time (${limit}m)',
+                              style: GoogleFonts.manrope(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: snapshot.hasData
+                                ? () => _setGeofenceFromChildLocation(snapshot.data!)
+                                : null,
+                            icon: const Icon(Icons.radar),
+                            label: Text(
+                              'Set geo-fence around child',
+                              style: GoogleFonts.manrope(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: _setGeofenceAroundParent,
+                            icon: const Icon(Icons.person_pin_circle),
+                            label: Text(
+                              'Set geo-fence around parent',
+                              style: GoogleFonts.manrope(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              FirebaseFirestore.instance
+                                  .collection('children')
+                                  .doc(widget.deviceUid)
+                                  .set({
+                                    'geofence.enabled': false,
+                                    'geofenceBreached': false,
+                                    'updatedAt': FieldValue.serverTimestamp(),
+                                  }, SetOptions(merge: true));
+                            },
+                            icon: const Icon(Icons.gps_off),
+                            label: Text(
+                              'Disable geo-fence',
+                              style: GoogleFonts.manrope(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => LogsScreen(
+                                    deviceUid: widget.deviceUid,
+                                    label: widget.label,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.history_toggle_off),
+                            label: Text(
+                              'View call/SMS/contacts logs',
+                              style: GoogleFonts.manrope(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: _requestChildLogsSync,
+                            icon: const Icon(Icons.sync_problem),
+                            label: Text(
+                              'Request logs sync',
+                              style: GoogleFonts.manrope(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      );
+                    },
+                  ),
                   StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                     stream: childStream,
                     builder: (context, snapshot) {
@@ -411,6 +724,23 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
                   Text(
                     'Select allowed apps and set daily limits.',
                     style: GoogleFonts.manrope(fontSize: 12, color: brandMuted),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: _requestChildAppSync,
+                      icon: const Icon(Icons.sync),
+                      label: Text(
+                        'Request child app sync',
+                        style: GoogleFonts.manrope(fontWeight: FontWeight.w600),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Expanded(

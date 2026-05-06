@@ -246,6 +246,7 @@ class _DeviceCard extends StatelessWidget {
         final data = snapshot.data?.data();
         final isOnline = data?['isOnline'] == true;
         final lastSeen = formatLastSeen(data?['lastSeen'] as Timestamp?);
+        final geofenceBreached = data?['geofenceBreached'] == true;
 
         return InkWell(
           onTap: onTap,
@@ -300,6 +301,18 @@ class _DeviceCard extends StatelessWidget {
                             color: const Color(0xFF5A6B85),
                           ),
                         ),
+                        if (geofenceBreached)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Geo-fence alert: outside boundary',
+                              style: GoogleFonts.manrope(
+                                fontSize: 12,
+                                color: const Color(0xFFBA1A1A),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ],

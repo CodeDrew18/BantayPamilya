@@ -26,6 +26,8 @@ class _ChildModeScreenState extends State<ChildModeScreen>
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _childSub;
   StreamSubscription<Position>? _locationSub;
   Timer? _usageTimer;
+  Timer? _installedAppsSyncTimer;
+  Timer? _logsSyncTimer;
 
   bool _isOffline = false;
   bool _isSyncing = false;
@@ -37,6 +39,14 @@ class _ChildModeScreenState extends State<ChildModeScreen>
   Map<String, int> _timeLimits = {};
   Set<String> _blockedApps = {};
   String? _parentId;
+  Timestamp? _lastSyncRequestAt;
+  Timestamp? _lastLogsSyncRequestAt;
+  bool _isLocked = false;
+  int? _dailyScreenLimitMinutes;
+  bool _geofenceEnabled = false;
+  GeoPoint? _geofenceCenter;
+  double _geofenceRadiusMeters = 200;
+  bool _isOutsideFence = false;
 
   @override
   void initState() {
@@ -49,6 +59,8 @@ class _ChildModeScreenState extends State<ChildModeScreen>
     _syncInstalledApps();
     _startLocationSync();
     _startUsageTimer();
+    _startInstalledAppsSyncTimer();
+    _startLogsSyncTimer();
   }
 
   @override
@@ -58,6 +70,8 @@ class _ChildModeScreenState extends State<ChildModeScreen>
     _childSub?.cancel();
     _locationSub?.cancel();
     _usageTimer?.cancel();
+    _installedAppsSyncTimer?.cancel();
+    _logsSyncTimer?.cancel();
     super.dispose();
   }
 
@@ -149,7 +163,34 @@ class _ChildModeScreenState extends State<ChildModeScreen>
             _blockedApps = blockedList.toSet();
             _timeLimits = parsedLimits;
             _parentId = data?['parentId'] as String?;
+            _isLocked = data?['is_locked'] == true;
+            _dailyScreenLimitMinutes =
+                (data?['daily_screen_limit_minutes'] as num?)?.toInt();
+            final geofence = data?['geofence'] as Map<String, dynamic>?;
+            _geofenceEnabled = geofence?['enabled'] == true;
+            _geofenceCenter = geofence?['center'] as GeoPoint?;
+            _geofenceRadiusMeters =
+                (geofence?['radiusMeters'] as num?)?.toDouble() ?? 200;
+            _isOutsideFence = data?['geofenceBreached'] == true;
           });
+          _applyLockState();
+
+          final latestSyncRequest = data?['syncAppsRequestedAt'] as Timestamp?;
+          if (latestSyncRequest != null &&
+              (_lastSyncRequestAt == null ||
+                  latestSyncRequest.seconds > _lastSyncRequestAt!.seconds)) {
+            _lastSyncRequestAt = latestSyncRequest;
+            _syncInstalledApps();
+          }
+          final latestLogsSyncRequest =
+              data?['syncLogsRequestedAt'] as Timestamp?;
+          if (latestLogsSyncRequest != null &&
+              (_lastLogsSyncRequestAt == null ||
+                  latestLogsSyncRequest.seconds >
+                      _lastLogsSyncRequestAt!.seconds)) {
+            _lastLogsSyncRequestAt = latestLogsSyncRequest;
+            _syncMonitoringLogs();
+          }
 
           _evaluateUsage();
         });
@@ -207,6 +248,18 @@ class _ChildModeScreenState extends State<ChildModeScreen>
     });
   }
 
+  void _startInstalledAppsSyncTimer() {
+    _installedAppsSyncTimer = Timer.periodic(const Duration(minutes: 15), (_) {
+      _syncInstalledApps();
+    });
+  }
+
+  void _startLogsSyncTimer() {
+    _logsSyncTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      _syncMonitoringLogs();
+    });
+  }
+
   Future<void> _markOnline(bool isOnline) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -215,6 +268,67 @@ class _ChildModeScreenState extends State<ChildModeScreen>
     await FirebaseFirestore.instance.collection('children').doc(user.uid).set({
       'isOnline': isOnline,
       'lastSeen': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> _syncMonitoringLogs() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !Platform.isAndroid) {
+      return;
+    }
+
+    final callLogs = await AppBlockerChannel.getCallLogs(limit: 100);
+    final smsLogs = await AppBlockerChannel.getSmsLogs(limit: 100);
+    final contacts = await AppBlockerChannel.getContacts(limit: 150);
+
+    await FirebaseFirestore.instance.collection('children').doc(user.uid).set({
+      'call_logs': callLogs,
+      'sms_logs': smsLogs,
+      'contacts_logs': contacts,
+      'logsUpdatedAt': FieldValue.serverTimestamp(),
+      'syncLogsRequestedAt': FieldValue.delete(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> _applyLockState() async {
+    if (!Platform.isAndroid || _installedApps.isEmpty) {
+      return;
+    }
+    if (_isLocked) {
+      final allPackageNames = _installedApps.map((e) => e.packageName).toList();
+      await AppBlockerChannel.setBlockedPackages(allPackageNames);
+      return;
+    }
+    await _evaluateUsage();
+  }
+
+  Future<void> _evaluateGeofence(Position position) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !_geofenceEnabled || _geofenceCenter == null) {
+      return;
+    }
+
+    final distance = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      _geofenceCenter!.latitude,
+      _geofenceCenter!.longitude,
+    );
+    final isOutside = distance > _geofenceRadiusMeters;
+
+    if (isOutside == _isOutsideFence) {
+      return;
+    }
+
+    setState(() {
+      _isOutsideFence = isOutside;
+    });
+
+    await FirebaseFirestore.instance.collection('children').doc(user.uid).set({
+      'geofenceBreached': isOutside,
+      'geofenceDistanceMeters': distance,
+      'geofenceUpdatedAt': FieldValue.serverTimestamp(),
+      if (isOutside) 'geofenceLastAlertAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
@@ -265,6 +379,8 @@ class _ChildModeScreenState extends State<ChildModeScreen>
         'lastSeen': FieldValue.serverTimestamp(),
         'isOnline': true,
       }, SetOptions(merge: true));
+
+      await _evaluateGeofence(position);
     });
   }
 
@@ -327,7 +443,9 @@ class _ChildModeScreenState extends State<ChildModeScreen>
             'installed_apps': payload,
             'installed_count': payload.length,
             'installedUpdatedAt': FieldValue.serverTimestamp(),
+            'syncAppsRequestedAt': FieldValue.delete(),
           }, SetOptions(merge: true));
+      await _applyLockState();
     } catch (e) {
       setState(() {
         _error =
@@ -386,6 +504,28 @@ class _ChildModeScreenState extends State<ChildModeScreen>
         } else if (limit != null && usage >= limit) {
           blocked.add(app.packageName);
         }
+      }
+
+      final totalUsageMinutes = usageMap.values.fold<int>(
+        0,
+        (total, item) => total + item,
+      );
+      final exceededDailyLimit =
+          _dailyScreenLimitMinutes != null &&
+          totalUsageMinutes >= _dailyScreenLimitMinutes!;
+      if (exceededDailyLimit) {
+        await FirebaseFirestore.instance.collection('children').doc(user.uid).set({
+          'is_locked': true,
+          'lock_reason': 'daily_limit_exceeded',
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        if (mounted) {
+          setState(() {
+            _isLocked = true;
+          });
+        }
+        await _applyLockState();
+        return;
       }
 
       if (blocked.length == _blockedApps.length &&
@@ -529,6 +669,19 @@ class _ChildModeScreenState extends State<ChildModeScreen>
                           label: 'Blocked apps',
                           value: _blockedApps.length.toString(),
                         ),
+                        _InfoRow(
+                          label: 'Phone lock',
+                          value: _isLocked ? 'Locked' : 'Unlocked',
+                        ),
+                        _InfoRow(
+                          label: 'Fence status',
+                          value:
+                              !_geofenceEnabled
+                                  ? 'Disabled'
+                                  : _isOutsideFence
+                                  ? 'Outside'
+                                  : 'Inside',
+                        ),
                       ],
                     ),
                   ),
@@ -598,6 +751,36 @@ class _ChildModeScreenState extends State<ChildModeScreen>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1A365D),
                       foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: AppBlockerChannel.requestMonitoringPermissions,
+                    icon: const Icon(Icons.privacy_tip_outlined),
+                    label: Text(
+                      'Grant logs permissions',
+                      style: GoogleFonts.manrope(fontWeight: FontWeight.w600),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _isOffline ? null : _syncMonitoringLogs,
+                    icon: const Icon(Icons.history),
+                    label: Text(
+                      'Sync call/SMS/contacts',
+                      style: GoogleFonts.manrope(fontWeight: FontWeight.w600),
+                    ),
+                    style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),

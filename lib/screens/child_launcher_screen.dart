@@ -24,6 +24,7 @@ class _ChildLauncherScreenState extends State<ChildLauncherScreen> {
   List<_LauncherApp> _installedApps = [];
   Set<String> _allowedApps = {};
   Set<String> _blockedApps = {};
+  bool _isLocked = false;
 
   @override
   void initState() {
@@ -109,11 +110,15 @@ class _ChildLauncherScreenState extends State<ChildLauncherScreen> {
           setState(() {
             _allowedApps = allowedList.toSet();
             _blockedApps = blockedList.toSet();
+            _isLocked = data?['is_locked'] == true;
           });
         });
   }
 
   List<_LauncherApp> _visibleApps() {
+    if (_isLocked) {
+      return [];
+    }
     if (_allowedApps.isEmpty) {
       return [];
     }
@@ -193,7 +198,9 @@ class _ChildLauncherScreenState extends State<ChildLauncherScreen> {
                             : apps.isEmpty
                             ? _EmptyState(
                               message:
-                                  _allowedApps.isEmpty
+                                  _isLocked
+                                      ? 'This phone is locked by the parent.'
+                                      : _allowedApps.isEmpty
                                       ? 'No allowed apps yet. Ask a parent to allow apps.'
                                       : 'No available apps to show.',
                             )
