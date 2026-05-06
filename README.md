@@ -10,33 +10,6 @@ BantayPamilya is a Flutter-based parent-child safety and device control app. It 
 - App blocking via Android Accessibility Service
 - Child launcher that shows only allowed apps
 
-## Firebase Structure (Example)
-
-```json
-{
-  "parents": {
-    "parentUid": {
-      "fullName": "Jane Doe",
-      "email": "jane@example.com",
-      "createdAt": "<timestamp>"
-    }
-  },
-  "children": {
-    "childUid": {
-      "parentId": "parentUid",
-      "label": "Child Phone",
-      "installed_apps": [
-        { "packageName": "com.facebook.katana", "appName": "Facebook" }
-      ],
-      "allowed_apps": ["com.facebook.katana"],
-      "time_limits": { "com.facebook.katana": 60 },
-      "blocked_apps": ["com.youtube.app"],
-      "isOnline": true,
-      "lastSeen": "<timestamp>"
-    }
-  }
-}
-```
 
 ## Setup
 
