@@ -29,15 +29,20 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   another_flutter_splash_screen: ^1.2.1
+  cloud_firestore: 6.3.0
   cupertino_icons: ^1.0.8
   email_validator: ^3.0.0
   firebase_auth: ^6.4.0
   firebase_core: ^4.7.0
   flutter:
     sdk: flutter
+  google_fonts: ^6.2.1
   connectivity_plus: ^5.0.2
   geolocator: ^14.0.2
   google_maps_flutter: ^2.14.0
+  app_usage: ^4.0.1
+  mobile_scanner: 7.2.0
+  qr_flutter: ^4.1.0
   quickalert: ^1.1.0
 
 dev_dependencies:

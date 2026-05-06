@@ -6,6 +6,10 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>Bantay Pamilya</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is needed to scan device QR codes.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Location access is needed to show live device tracking.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

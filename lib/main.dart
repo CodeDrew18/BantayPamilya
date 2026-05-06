@@ -1,6 +1,10 @@
 import 'package:bantay_pamilya/firebase_options.dart';
+import 'package:bantay_pamilya/screens/device_qr_screen.dart';
 import 'package:bantay_pamilya/screens/dashboard_screen.dart';
 import 'package:bantay_pamilya/screens/map_screen.dart';
+import 'package:bantay_pamilya/screens/parental_control_screen.dart';
+import 'package:bantay_pamilya/screens/profile_management_screen.dart';
+import 'package:bantay_pamilya/screens/qr_scan_screen.dart';
 import 'package:bantay_pamilya/splashscreen/splash_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -27,6 +31,10 @@ class Main extends StatelessWidget {
         '/register': (context) => const RegisterScreen(),
         '/dashboard': (context) => const DashboardScreen(),
         '/map': (context) => const MapScreen(),
+        '/scan': (context) => const QrScanScreen(),
+        '/device-qr': (context) => const DeviceQrScreen(),
+        '/profile': (context) => const ProfileManagementScreen(),
+        '/parental-control': (context) => const ParentalControlScreen(),
       },
     );
   }

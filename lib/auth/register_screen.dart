@@ -1,4 +1,5 @@
 import 'package:email_validator/email_validator.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:quickalert/quickalert.dart';
@@ -11,20 +12,36 @@ class RegisterScreen extends StatefulWidget {
 }
 
 final formKey = GlobalKey<FormState>();
+final fullNameController = TextEditingController();
 final emailController = TextEditingController();
 final passwordController = TextEditingController();
 final confirmPasswordController = TextEditingController();
 
 Future<bool> registerUser(
   BuildContext context,
+  String fullName,
   String email,
   String password,
 ) async {
   try {
-    await FirebaseAuth.instance.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    final credential = await FirebaseAuth.instance
+        .createUserWithEmailAndPassword(email: email, password: password);
+    final user = credential.user;
+    if (user == null) {
+      await QuickAlert.show(
+        context: context,
+        type: QuickAlertType.error,
+        title: 'Error',
+        text: 'Unable to create account. Please try again.',
+      );
+      return false;
+    }
+
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'fullName': fullName,
+      'email': email,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
     await QuickAlert.show(
       context: context,
       type: QuickAlertType.success,
@@ -230,6 +247,39 @@ class _RegisterScreenState extends State<RegisterScreen>
                           child: Column(
                             children: [
                               TextFormField(
+                                controller: fullNameController,
+                                textInputAction: TextInputAction.next,
+                                decoration: InputDecoration(
+                                  prefixIcon: const Icon(
+                                    Icons.person_outline,
+                                    color: brandDark,
+                                  ),
+                                  labelText: 'Full name',
+                                  filled: true,
+                                  fillColor: inputFill,
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: brandAccent,
+                                      width: 1.4,
+                                    ),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Please enter your full name';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
                                 controller: emailController,
                                 keyboardType: TextInputType.emailAddress,
                                 textInputAction: TextInputAction.next,
@@ -384,6 +434,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                             if (formKey.currentState!.validate()) {
                               final success = await registerUser(
                                 context,
+                                fullNameController.text.trim(),
                                 emailController.text,
                                 passwordController.text,
                               );
