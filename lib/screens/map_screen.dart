@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,6 +28,9 @@ class _MapScreenState extends State<MapScreen> {
   String? _locationError;
   bool _locationReady = false;
   bool _isOffline = false;
+  
+String? _currentAddress;
+Timer? _geocodeDebounce;
 
   @override
   void initState() {
@@ -42,6 +46,30 @@ class _MapScreenState extends State<MapScreen> {
     _mapController?.dispose();
     super.dispose();
   }
+
+Future<void> _updateAddress(double lat, double lng) async {
+  try {
+    final placemarks = await placemarkFromCoordinates(lat, lng);
+
+    if (placemarks.isNotEmpty) {
+      final place = placemarks.first;
+
+      setState(() {
+        _currentAddress =
+            '${place.street ?? ''}, '
+            '${place.locality ?? ''}, '
+            '${place.administrativeArea ?? ''}, '
+            '${place.country ?? ''}'
+                .replaceAll(RegExp(r', ,'), ',')
+                .trim();
+      });
+    }
+  } catch (_) {
+    setState(() {
+      _currentAddress = 'Unable to resolve address';
+    });
+  }
+}  
 
   Future<void> _listenConnectivity() async {
     _connectivitySub = Connectivity().onConnectivityChanged.listen((
@@ -154,16 +182,34 @@ class _MapScreenState extends State<MapScreen> {
     await _startLocationStream();
   }
 
-  void _updatePosition(Position position) {
-    setState(() {
-      _currentPosition = position;
-      _locationError = null;
-    });
+  // void _updatePosition(Position position) {
+  //   setState(() {
+  //     _currentPosition = position;
+  //     _locationError = null;
+  //   });
 
-    final target = LatLng(position.latitude, position.longitude);
-    _mapController?.animateCamera(CameraUpdate.newLatLng(target));
-    _syncLocation(position);
-  }
+  //   final target = LatLng(position.latitude, position.longitude);
+  //   _mapController?.animateCamera(CameraUpdate.newLatLng(target));
+  //   _syncLocation(position);
+  // }
+
+  void _updatePosition(Position position) {
+  setState(() {
+    _currentPosition = position;
+    _locationError = null;
+  });
+
+  final target = LatLng(position.latitude, position.longitude);
+  _mapController?.animateCamera(CameraUpdate.newLatLng(target));
+
+  _syncLocation(position);
+
+  // ✅ Debounce geocoding (prevents API spam)
+  _geocodeDebounce?.cancel();
+  _geocodeDebounce = Timer(const Duration(seconds: 2), () {
+    _updateAddress(position.latitude, position.longitude);
+  });
+}
 
   Future<void> _syncOnlineStatus(bool isOnline) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -264,12 +310,21 @@ class _MapScreenState extends State<MapScreen> {
       );
     }
 
+    // final locationText =
+    //     _locationError ??
+    //     (current == null
+    //         ? 'Enable location to see your position.'
+    //         : '${current.latitude.toStringAsFixed(5)}, '
+    //             '${current.longitude.toStringAsFixed(5)}');
+
     final locationText =
-        _locationError ??
+    _locationError ??
+    (_currentAddress ??
         (current == null
             ? 'Enable location to see your position.'
             : '${current.latitude.toStringAsFixed(5)}, '
-                '${current.longitude.toStringAsFixed(5)}');
+              '${current.longitude.toStringAsFixed(5)}'));
+
     final showLocationAction = current == null;
     final infoCardTop = _isOffline ? 76.0 : 16.0;
 
