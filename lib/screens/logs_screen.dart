@@ -27,48 +27,62 @@ class LogsScreen extends StatelessWidget {
       ),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream:
-            FirebaseFirestore.instance.collection('children').doc(deviceUid).snapshots(),
+            FirebaseFirestore.instance
+                .collection('children')
+                .doc(deviceUid)
+                .snapshots(),
         builder: (context, snapshot) {
           final data = snapshot.data?.data() ?? const <String, dynamic>{};
           final calls = (data['call_logs'] as List<dynamic>? ?? const []);
           final sms = (data['sms_logs'] as List<dynamic>? ?? const []);
-          final contacts = (data['contacts_logs'] as List<dynamic>? ?? const []);
+          final contacts =
+              (data['contacts_logs'] as List<dynamic>? ?? const []);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               _SectionCard(
                 title: 'Call Logs',
-                children: calls
-                    .take(20)
-                    .map((row) => _row(
-                          title: '${row['name'] ?? row['number'] ?? 'Unknown'}',
-                          subtitle:
-                              '${row['number'] ?? ''} · ${_formatEpoch(row['date'])}',
-                        ))
-                    .toList(),
+                children:
+                    calls
+                        .take(20)
+                        .map(
+                          (row) => _row(
+                            title:
+                                '${row['name'] ?? row['number'] ?? 'Unknown'}',
+                            subtitle:
+                                '${row['number'] ?? ''} · ${_formatEpoch(row['date'])}',
+                          ),
+                        )
+                        .toList(),
               ),
               const SizedBox(height: 12),
               _SectionCard(
                 title: 'SMS Logs',
-                children: sms
-                    .take(20)
-                    .map((row) => _row(
-                          title: '${row['address'] ?? 'Unknown'}',
-                          subtitle:
-                              '${(row['body'] ?? '').toString().replaceAll('\n', ' ')} · ${_formatEpoch(row['date'])}',
-                        ))
-                    .toList(),
+                children:
+                    sms
+                        .take(20)
+                        .map(
+                          (row) => _row(
+                            title: '${row['address'] ?? 'Unknown'}',
+                            subtitle:
+                                '${(row['body'] ?? '').toString().replaceAll('\n', ' ')} · ${_formatEpoch(row['date'])}',
+                          ),
+                        )
+                        .toList(),
               ),
               const SizedBox(height: 12),
               _SectionCard(
                 title: 'Contacts',
-                children: contacts
-                    .take(40)
-                    .map((row) => _row(
-                          title: '${row['name'] ?? 'Unknown'}',
-                          subtitle: '${row['number'] ?? ''}',
-                        ))
-                    .toList(),
+                children:
+                    contacts
+                        .take(40)
+                        .map(
+                          (row) => _row(
+                            title: '${row['name'] ?? 'Unknown'}',
+                            subtitle: '${row['number'] ?? ''}',
+                          ),
+                        )
+                        .toList(),
               ),
             ],
           );
