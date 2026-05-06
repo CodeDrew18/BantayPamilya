@@ -77,6 +77,9 @@ class _QrScanScreenState extends State<QrScanScreen>
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
+    if (!mounted) {
+      return;
+    }
     if (_isHandling) {
       return;
     }
@@ -112,6 +115,9 @@ class _QrScanScreenState extends State<QrScanScreen>
   }
 
   Future<void> _handleDeviceUid(String deviceUid) async {
+    if (!mounted) {
+      return;
+    }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       await _showMessageDialog(
@@ -121,21 +127,35 @@ class _QrScanScreenState extends State<QrScanScreen>
       return;
     }
 
-    final docRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('paired_devices')
+    final childRef = FirebaseFirestore.instance
+        .collection('children')
         .doc(deviceUid);
 
     try {
-      final snapshot = await docRef.get();
+      final snapshot = await childRef.get();
+      final data = snapshot.data();
+      final existingParent = data?['parentId'] as String?;
 
-      if (snapshot.exists) {
-        final data = snapshot.data();
+      if (!mounted) {
+        return;
+      }
+
+      if (existingParent != null && existingParent.isNotEmpty) {
+        final isSameParent = existingParent == user.uid;
+        if (isSameParent) {
+          await childRef.set({
+            'parentId': user.uid,
+            'pairedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+
         await _showMessageDialog(
           title: 'Device already paired',
           message:
-              data?['label'] == null
+              isSameParent
+                  ? 'This device is already paired with your account.'
+                  : data?['label'] == null
                   ? 'This device UID is already registered.'
                   : 'This device is already registered as ${data?['label']}.',
           deviceUid: deviceUid,
@@ -143,13 +163,16 @@ class _QrScanScreenState extends State<QrScanScreen>
         return;
       }
 
-      final saved = await _showRegistrationSheet(deviceUid, docRef);
+      final saved = await _showRegistrationSheet(deviceUid, childRef);
       if (saved && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Device saved successfully.')),
         );
       }
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       await _showMessageDialog(
         title: 'Unable to check device',
         message: 'Please try again when you are online.',
@@ -163,6 +186,9 @@ class _QrScanScreenState extends State<QrScanScreen>
     required String message,
     String? deviceUid,
   }) async {
+    if (!mounted) {
+      return;
+    }
     await showDialog<void>(
       context: context,
       builder: (context) {
@@ -211,8 +237,11 @@ class _QrScanScreenState extends State<QrScanScreen>
 
   Future<bool> _showRegistrationSheet(
     String deviceUid,
-    DocumentReference<Map<String, dynamic>> docRef,
+    DocumentReference<Map<String, dynamic>> childRef,
   ) async {
+    if (!mounted) {
+      return false;
+    }
     final controller = TextEditingController();
     String? errorText;
 
@@ -301,14 +330,26 @@ class _QrScanScreenState extends State<QrScanScreen>
                           return;
                         }
 
+                        final parent = FirebaseAuth.instance.currentUser;
+                        if (parent == null) {
+                          return;
+                        }
+
                         try {
-                          await docRef.set({
-                            'deviceUid': deviceUid,
+                          await FirebaseFirestore.instance
+                              .collection('parents')
+                              .doc(parent.uid)
+                              .set({
+                                'createdAt': FieldValue.serverTimestamp(),
+                                'updatedAt': FieldValue.serverTimestamp(),
+                              }, SetOptions(merge: true));
+
+                          await childRef.set({
+                            'parentId': parent.uid,
                             'label': label,
-                            'isOnline': !_isOffline,
-                            'createdAt': FieldValue.serverTimestamp(),
-                            'lastSeen': FieldValue.serverTimestamp(),
-                          });
+                            'pairedAt': FieldValue.serverTimestamp(),
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          }, SetOptions(merge: true));
 
                           if (!context.mounted) {
                             return;

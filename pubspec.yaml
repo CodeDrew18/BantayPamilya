@@ -41,6 +41,7 @@ dependencies:
   geolocator: ^14.0.2
   google_maps_flutter: ^2.14.0
   app_usage: ^4.0.1
+  device_apps: ^2.2.0
   mobile_scanner: 7.2.0
   qr_flutter: ^4.1.0
   quickalert: ^1.1.0

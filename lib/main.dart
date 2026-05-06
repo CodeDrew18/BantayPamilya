@@ -1,6 +1,8 @@
 import 'package:bantay_pamilya/firebase_options.dart';
 import 'package:bantay_pamilya/screens/device_qr_screen.dart';
 import 'package:bantay_pamilya/screens/dashboard_screen.dart';
+import 'package:bantay_pamilya/screens/child_launcher_screen.dart';
+import 'package:bantay_pamilya/screens/child_mode_screen.dart';
 import 'package:bantay_pamilya/screens/map_screen.dart';
 import 'package:bantay_pamilya/screens/parental_control_screen.dart';
 import 'package:bantay_pamilya/screens/profile_management_screen.dart';
@@ -35,6 +37,8 @@ class Main extends StatelessWidget {
         '/device-qr': (context) => const DeviceQrScreen(),
         '/profile': (context) => const ProfileManagementScreen(),
         '/parental-control': (context) => const ParentalControlScreen(),
+        '/child-mode': (context) => const ChildModeScreen(),
+        '/child-launcher': (context) => const ChildLauncherScreen(),
       },
     );
   }

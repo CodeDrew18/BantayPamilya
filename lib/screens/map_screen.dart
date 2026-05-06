@@ -182,17 +182,6 @@ Future<void> _updateAddress(double lat, double lng) async {
     await _startLocationStream();
   }
 
-  // void _updatePosition(Position position) {
-  //   setState(() {
-  //     _currentPosition = position;
-  //     _locationError = null;
-  //   });
-
-  //   final target = LatLng(position.latitude, position.longitude);
-  //   _mapController?.animateCamera(CameraUpdate.newLatLng(target));
-  //   _syncLocation(position);
-  // }
-
   void _updatePosition(Position position) {
   setState(() {
     _currentPosition = position;
@@ -204,7 +193,6 @@ Future<void> _updateAddress(double lat, double lng) async {
 
   _syncLocation(position);
 
-  // ✅ Debounce geocoding (prevents API spam)
   _geocodeDebounce?.cancel();
   _geocodeDebounce = Timer(const Duration(seconds: 2), () {
     _updateAddress(position.latitude, position.longitude);
@@ -310,13 +298,6 @@ Future<void> _updateAddress(double lat, double lng) async {
       );
     }
 
-    // final locationText =
-    //     _locationError ??
-    //     (current == null
-    //         ? 'Enable location to see your position.'
-    //         : '${current.latitude.toStringAsFixed(5)}, '
-    //             '${current.longitude.toStringAsFixed(5)}');
-
     final locationText =
     _locationError ??
     (_currentAddress ??
@@ -333,9 +314,8 @@ Future<void> _updateAddress(double lat, double lng) async {
         user == null
             ? null
             : FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.uid)
-                .collection('paired_devices')
+                .collection('children')
+                .where('parentId', isEqualTo: user.uid)
                 .snapshots();
 
     Widget mapWidget = _buildMap(markers, initialTarget);
@@ -343,49 +323,32 @@ Future<void> _updateAddress(double lat, double lng) async {
       mapWidget = StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: pairedStream,
         builder: (context, snapshot) {
-          final labelById = <String, String>{};
+          final allMarkers = <Marker>{}..addAll(markers);
           for (final doc in snapshot.data?.docs ?? []) {
             final data = doc.data();
-            labelById[doc.id] = (data['label'] as String?) ?? 'Paired device';
+            final latLng = _latLngFrom(data['lastLocation']);
+            if (latLng == null) {
+              continue;
+            }
+            allMarkers.add(
+              Marker(
+                markerId: MarkerId(doc.id),
+                position: latLng,
+                infoWindow: InfoWindow(
+                  title: (data['label'] as String?) ?? 'Paired device',
+                  snippet: (data['isOnline'] == true) ? 'Online' : 'Offline',
+                ),
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueRed,
+                ),
+              ),
+            );
           }
-          final ids = labelById.keys.toList();
-          if (ids.isEmpty) {
+
+          if (allMarkers.length == markers.length) {
             return _buildMap(markers, initialTarget);
           }
-          if (ids.length > 10) {
-            ids.removeRange(10, ids.length);
-          }
-          final devicesQuery =
-              FirebaseFirestore.instance
-                  .collection('devices')
-                  .where(FieldPath.documentId, whereIn: ids)
-                  .snapshots();
-          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: devicesQuery,
-            builder: (context, deviceSnapshot) {
-              final allMarkers = <Marker>{}..addAll(markers);
-              for (final doc in deviceSnapshot.data?.docs ?? []) {
-                final data = doc.data();
-                final latLng = _latLngFrom(data['lastLocation']);
-                if (latLng == null) {
-                  continue;
-                }
-                allMarkers.add(
-                  Marker(
-                    markerId: MarkerId(doc.id),
-                    position: latLng,
-                    infoWindow: InfoWindow(
-                      title: labelById[doc.id] ?? 'Paired device',
-                    ),
-                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueRed,
-                    ),
-                  ),
-                );
-              }
-              return _buildMap(allMarkers, initialTarget);
-            },
-          );
+          return _buildMap(allMarkers, initialTarget);
         },
       );
     }

@@ -1,27 +1,57 @@
 # BantayPamilya
 
-**BantayPamilya** is a mobile-based family safety application developed using Flutter. It is designed to provide real-time location tracking and device monitoring to help families stay connected and ensure the safety of their members. The system emphasizes secure, transparent, and consent-based monitoring.
+BantayPamilya is a Flutter-based parent-child safety and device control app. It supports QR pairing, a parent allowlist with time limits, and a child-mode launcher with an app blocker.
 
-## Features
-- Real-time location tracking  
-- Smart alerts and notifications  
-- Device activity monitoring  
-- Family member connectivity  
+## Key Features
 
-## Getting Started
+- QR pairing between parent and child devices
+- Parent allowlist with per-app daily limits
+- Child installed app sync + real-time rules
+- App blocking via Android Accessibility Service
+- Child launcher that shows only allowed apps
 
-This project serves as a foundational implementation of a family monitoring system using Flutter.
+## Firebase Structure (Example)
 
-### Prerequisites
-- Flutter SDK  
-- Android Studio or Visual Studio Code  
-- Android device or emulator  
+```json
+{
+  "parents": {
+    "parentUid": {
+      "fullName": "Jane Doe",
+      "email": "jane@example.com",
+      "createdAt": "<timestamp>"
+    }
+  },
+  "children": {
+    "childUid": {
+      "parentId": "parentUid",
+      "label": "Child Phone",
+      "installed_apps": [
+        { "packageName": "com.facebook.katana", "appName": "Facebook" }
+      ],
+      "allowed_apps": ["com.facebook.katana"],
+      "time_limits": { "com.facebook.katana": 60 },
+      "blocked_apps": ["com.youtube.app"],
+      "isOnline": true,
+      "lastSeen": "<timestamp>"
+    }
+  }
+}
+```
 
-### License
-This project is licensed under the MIT License - see the LICENSE file for details.
+## Setup
 
-### Installation
-1. Clone the repository:
-```bash
-git clone https://github.com/your-username/bantay_pamilya.git
+1. Install Flutter and the Android SDK.
+2. Run `flutter pub get`.
+3. Configure Firebase using FlutterFire CLI and ensure the Android `google-services.json` is in place.
+4. Enable Firestore in the Firebase console.
+5. On the child device, grant:
+   - Usage Access
+   - Accessibility access for the app blocker
+6. Optional: Set this app as the default Home launcher to use the child launcher UI.
 
+## Basic Flow
+
+1. On the child device, sign in and open **Device QR** to show the pairing code.
+2. On the parent device, scan the QR code and set allowed apps and time limits.
+3. On the child device, open **Child Mode** to sync installed apps and enforce limits.
+4. Use **Child Launcher** to show only allowed apps.

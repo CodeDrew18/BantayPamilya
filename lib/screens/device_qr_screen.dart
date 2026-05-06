@@ -72,9 +72,10 @@ class _DeviceQrScreenState extends State<DeviceQrScreen> {
 
     final uid = user.uid;
     try {
-      await FirebaseFirestore.instance.collection('device_qr').doc(uid).set({
-        'deviceUid': uid,
-        'ownerUid': uid,
+      await FirebaseFirestore.instance.collection('children').doc(uid).set({
+        'childUid': uid,
+        'isOnline': true,
+        'lastSeen': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 

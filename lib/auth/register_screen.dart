@@ -42,6 +42,11 @@ Future<bool> registerUser(
       'email': email,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    await FirebaseFirestore.instance.collection('parents').doc(user.uid).set({
+      'fullName': fullName,
+      'email': email,
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
     await QuickAlert.show(
       context: context,
       type: QuickAlertType.success,

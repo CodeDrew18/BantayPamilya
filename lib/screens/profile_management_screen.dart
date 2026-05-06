@@ -135,6 +135,11 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         'email': _email,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('parents').doc(user.uid).set({
+        'fullName': fullName,
+        'email': _email,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       await user.updateDisplayName(fullName);
 

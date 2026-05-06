@@ -84,10 +84,8 @@ class _ParentalControlScreenState extends State<ParentalControlScreen> {
         user == null
             ? null
             : FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.uid)
-                .collection('paired_devices')
-                .orderBy('createdAt', descending: true)
+                .collection('children')
+                .where('parentId', isEqualTo: user.uid)
                 .snapshots();
 
     return Scaffold(
@@ -241,7 +239,7 @@ class _DeviceCard extends StatelessWidget {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream:
           FirebaseFirestore.instance
-              .collection('devices')
+              .collection('children')
               .doc(deviceUid)
               .snapshots(),
       builder: (context, snapshot) {

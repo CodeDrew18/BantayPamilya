@@ -1,9 +1,7 @@
 import 'dart:async';
 
-import 'package:app_usage/app_usage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -26,7 +24,6 @@ class DeviceControlScreen extends StatefulWidget {
 class _DeviceControlScreenState extends State<DeviceControlScreen> {
   StreamSubscription<ConnectivityResult>? _connectivitySub;
   bool _isOffline = false;
-  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -81,81 +78,60 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     return 'Last active: ${delta.inDays}d ago';
   }
 
-  Future<void> _syncUsage() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null || currentUser.uid != widget.deviceUid) {
+  String _formatInstalledSync(Timestamp? timestamp, int? installedCount) {
+    if (timestamp == null) {
+      return 'App list not synced yet';
+    }
+    final delta = DateTime.now().difference(timestamp.toDate());
+    final when =
+        delta.inMinutes < 1
+            ? 'just now'
+            : delta.inHours < 1
+            ? '${delta.inMinutes}m ago'
+            : delta.inDays < 1
+            ? '${delta.inHours}h ago'
+            : '${delta.inDays}d ago';
+    final count = installedCount ?? 0;
+    return 'Synced $when ($count apps)';
+  }
+
+  Future<void> _toggleAllowedApp(String packageName, bool isAllowed) async {
+    if (_isOffline) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Open this screen on the paired device to sync usage.'),
-        ),
+        const SnackBar(content: Text('Go online to update app rules.')),
       );
       return;
     }
 
-    setState(() {
-      _isSyncing = true;
-    });
+    final childRef = FirebaseFirestore.instance
+        .collection('children')
+        .doc(widget.deviceUid);
 
     try {
-      final end = DateTime.now();
-      final start = end.subtract(const Duration(hours: 24));
-      final usageInfo = await AppUsage().getAppUsage(start, end);
-
-      final deviceRef = FirebaseFirestore.instance
-          .collection('devices')
-          .doc(widget.deviceUid);
-      final batch = FirebaseFirestore.instance.batch();
-
-      for (final info in usageInfo) {
-        final minutes = info.usage.inMinutes;
-        if (minutes <= 0) {
-          continue;
-        }
-        final usageRef = deviceRef
-            .collection('app_usage')
-            .doc(info.packageName);
-        batch.set(usageRef, {
-          'packageName': info.packageName,
-          'usageMinutes': minutes,
-          'lastUpdated': FieldValue.serverTimestamp(),
+      if (isAllowed) {
+        await childRef.set({
+          'allowed_apps': FieldValue.arrayUnion([packageName]),
         }, SetOptions(merge: true));
+      } else {
+        await childRef.update({
+          'allowed_apps': FieldValue.arrayRemove([packageName]),
+          'time_limits.$packageName': FieldValue.delete(),
+        });
       }
-
-      await batch.commit();
-
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Usage synced successfully.')),
-      );
     } catch (e) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Grant usage access in Android settings to sync apps.'),
-        ),
+        const SnackBar(content: Text('Unable to update app rule right now.')),
       );
-    } finally {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isSyncing = false;
-      });
     }
   }
 
-  Future<void> _editRule(
-    String packageName,
-    Map<String, dynamic>? currentRule,
-  ) async {
+  Future<void> _editLimit(String packageName, int? currentLimit) async {
     final limitController = TextEditingController(
-      text: currentRule?['limitMinutes']?.toString() ?? '',
+      text: currentLimit?.toString() ?? '',
     );
-    var isHidden = currentRule?['isHidden'] == true;
 
     final updated = await showModalBottomSheet<bool>(
       context: context,
@@ -210,27 +186,6 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Hide app on device',
-                        style: GoogleFonts.manrope(
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF0D1C2E),
-                        ),
-                      ),
-                      Switch(
-                        value: isHidden,
-                        activeColor: const Color(0xFF2E8B6B),
-                        onChanged: (value) {
-                          setModalState(() {
-                            isHidden = value;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -281,29 +236,41 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
       return;
     }
 
-    final parent = FirebaseAuth.instance.currentUser;
-    if (parent == null) {
-      limitController.dispose();
-      return;
+    final childRef = FirebaseFirestore.instance
+        .collection('children')
+        .doc(widget.deviceUid);
+    final limitText = limitController.text.trim();
+
+    if (limitText.isEmpty) {
+      await childRef.update({'time_limits.$packageName': FieldValue.delete()});
+    } else {
+      final parsedLimit = int.tryParse(limitText);
+      if (parsedLimit != null) {
+        await childRef.set({
+          'time_limits.$packageName': parsedLimit,
+          'allowed_apps': FieldValue.arrayUnion([packageName]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
     }
 
-    final parsedLimit = int.tryParse(limitController.text.trim());
-    final rulesRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(parent.uid)
-        .collection('paired_devices')
-        .doc(widget.deviceUid)
-        .collection('rules')
-        .doc(packageName);
-
-    await rulesRef.set({
-      'packageName': packageName,
-      'limitMinutes': parsedLimit,
-      'isHidden': isHidden,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
     limitController.dispose();
+  }
+
+  List<_InstalledApp> _parseInstalledApps(List<dynamic>? raw) {
+    final apps = <_InstalledApp>[];
+    for (final item in raw ?? const []) {
+      if (item is Map) {
+        final packageName = item['packageName'] as String? ?? '';
+        if (packageName.isEmpty) {
+          continue;
+        }
+        final appName = item['appName'] as String? ?? packageName;
+        apps.add(_InstalledApp(packageName: packageName, appName: appName));
+      }
+    }
+    apps.sort((a, b) => a.appName.compareTo(b.appName));
+    return apps;
   }
 
   @override
@@ -312,29 +279,9 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     const brandMuted = Color(0xFF5A6B85);
     const surface = Color(0xFFF8F9FF);
 
-    final parent = FirebaseAuth.instance.currentUser;
-    final rulesStream =
-        parent == null
-            ? null
-            : FirebaseFirestore.instance
-                .collection('users')
-                .doc(parent.uid)
-                .collection('paired_devices')
-                .doc(widget.deviceUid)
-                .collection('rules')
-                .snapshots();
-
-    final usageStream =
+    final childStream =
         FirebaseFirestore.instance
-            .collection('devices')
-            .doc(widget.deviceUid)
-            .collection('app_usage')
-            .orderBy('usageMinutes', descending: true)
-            .snapshots();
-
-    final deviceStream =
-        FirebaseFirestore.instance
-            .collection('devices')
+            .collection('children')
             .doc(widget.deviceUid)
             .snapshots();
 
@@ -364,7 +311,7 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    stream: deviceStream,
+                    stream: childStream,
                     builder: (context, snapshot) {
                       final data = snapshot.data?.data();
                       final isOnline = data?['isOnline'] == true;
@@ -452,44 +399,8 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
                     ),
                   if (_isOffline) const SizedBox(height: 12),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              _isSyncing || _isOffline ? null : _syncUsage,
-                          icon:
-                              _isSyncing
-                                  ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                  : const Icon(Icons.sync),
-                          label: Text(
-                            _isSyncing ? 'Syncing...' : 'Sync app usage',
-                            style: GoogleFonts.manrope(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1A365D),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
                   Text(
-                    'App usage (last 24 hours)',
+                    'Installed apps',
                     style: GoogleFonts.manrope(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -498,88 +409,117 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Usage updates when the paired device syncs from its app.',
+                    'Select allowed apps and set daily limits.',
                     style: GoogleFonts.manrope(fontSize: 12, color: brandMuted),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Expanded(
-                    child:
-                        rulesStream == null
-                            ? _EmptyState(
-                              message: 'Sign in to manage app limits.',
-                            )
-                            : StreamBuilder<
-                              QuerySnapshot<Map<String, dynamic>>
-                            >(
-                              stream: rulesStream,
-                              builder: (context, rulesSnapshot) {
-                                final rules = <String, Map<String, dynamic>>{};
-                                for (final doc
-                                    in rulesSnapshot.data?.docs ?? []) {
-                                  rules[doc.id] = doc.data();
-                                }
-                                return StreamBuilder<
-                                  QuerySnapshot<Map<String, dynamic>>
-                                >(
-                                  stream: usageStream,
-                                  builder: (context, usageSnapshot) {
-                                    if (usageSnapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return const Center(
-                                        child: CircularProgressIndicator(),
-                                      );
-                                    }
+                    child: StreamBuilder<
+                      DocumentSnapshot<Map<String, dynamic>>
+                    >(
+                      stream: childStream,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
 
-                                    if (usageSnapshot.hasError) {
-                                      return _EmptyState(
-                                        message:
-                                            'Unable to load app usage right now.',
-                                      );
-                                    }
+                        if (snapshot.hasError) {
+                          return _EmptyState(
+                            message: 'Unable to load installed apps right now.',
+                          );
+                        }
 
-                                    final docs = usageSnapshot.data?.docs ?? [];
-                                    if (docs.isEmpty) {
-                                      return _EmptyState(
-                                        message:
-                                            'No usage data yet. Sync from the paired device.',
-                                      );
-                                    }
+                        final data = snapshot.data?.data();
+                        final installedApps = _parseInstalledApps(
+                          data?['installed_apps'] as List<dynamic>?,
+                        );
+                        final allowedApps =
+                            (data?['allowed_apps'] as List<dynamic>?)
+                                ?.cast<String>() ??
+                            <String>[];
+                        final blockedApps =
+                            (data?['blocked_apps'] as List<dynamic>?)
+                                ?.cast<String>() ??
+                            <String>[];
+                        final limits =
+                            (data?['time_limits'] as Map<String, dynamic>?) ??
+                            const <String, dynamic>{};
+                        final installedUpdatedAt =
+                            data?['installedUpdatedAt'] as Timestamp?;
+                        final installedCount =
+                            (data?['installed_count'] as num?)?.toInt() ??
+                            installedApps.length;
 
-                                    return ListView.separated(
-                                      itemCount: docs.length,
-                                      separatorBuilder:
-                                          (_, __) => const SizedBox(height: 10),
-                                      itemBuilder: (context, index) {
-                                        final data = docs[index].data();
-                                        final packageName =
-                                            (data['packageName'] as String?) ??
-                                            docs[index].id;
-                                        final minutes =
-                                            (data['usageMinutes'] as num?)
-                                                ?.toInt() ??
-                                            0;
-                                        final rule = rules[packageName];
-                                        final limitMinutes =
-                                            (rule?['limitMinutes'] as num?)
-                                                ?.toInt();
-                                        final isHidden =
-                                            rule?['isHidden'] == true;
+                        if (installedApps.isEmpty) {
+                          return _EmptyState(
+                            message:
+                                'No installed apps yet. Open child mode on the child device, allow app access, then tap "Sync installed apps".',
+                          );
+                        }
 
-                                        return _AppUsageTile(
-                                          packageName: packageName,
-                                          minutes: minutes,
-                                          limitMinutes: limitMinutes,
-                                          isHidden: isHidden,
-                                          onTap:
-                                              () =>
-                                                  _editRule(packageName, rule),
-                                        );
-                                      },
-                                    );
-                                  },
-                                );
-                              },
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: 4,
+                                right: 4,
+                                bottom: 10,
+                              ),
+                              child: Text(
+                                _formatInstalledSync(
+                                  installedUpdatedAt,
+                                  installedCount,
+                                ),
+                                style: GoogleFonts.manrope(
+                                  fontSize: 12,
+                                  color: brandMuted,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
+                            Expanded(
+                              child: ListView.separated(
+                                itemCount: installedApps.length,
+                                separatorBuilder:
+                                    (_, __) => const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  final app = installedApps[index];
+                                  final isAllowed = allowedApps.contains(
+                                    app.packageName,
+                                  );
+                                  final limitValue = limits[app.packageName];
+                                  final limitMinutes =
+                                      limitValue is num
+                                          ? limitValue.toInt()
+                                          : null;
+                                  final isBlocked = blockedApps.contains(
+                                    app.packageName,
+                                  );
+
+                                  return _AppRuleTile(
+                                    appName: app.appName,
+                                    packageName: app.packageName,
+                                    isAllowed: isAllowed,
+                                    isBlocked: isBlocked,
+                                    limitMinutes: limitMinutes,
+                                    onToggle: (value) {
+                                      _toggleAllowedApp(app.packageName, value);
+                                    },
+                                    onEditLimit: () {
+                                      _editLimit(app.packageName, limitMinutes);
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -591,68 +531,96 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
   }
 }
 
-class _AppUsageTile extends StatelessWidget {
-  const _AppUsageTile({
+class _AppRuleTile extends StatelessWidget {
+  const _AppRuleTile({
+    required this.appName,
     required this.packageName,
-    required this.minutes,
+    required this.isAllowed,
+    required this.isBlocked,
     required this.limitMinutes,
-    required this.isHidden,
-    required this.onTap,
+    required this.onToggle,
+    required this.onEditLimit,
   });
 
+  final String appName;
   final String packageName;
-  final int minutes;
+  final bool isAllowed;
+  final bool isBlocked;
   final int? limitMinutes;
-  final bool isHidden;
-  final VoidCallback onTap;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onEditLimit;
 
   @override
   Widget build(BuildContext context) {
     final limitText =
         limitMinutes == null ? 'No limit' : 'Limit: ${limitMinutes}m';
-    final hiddenText = isHidden ? 'Hidden' : 'Visible';
+    final statusText =
+        isBlocked ? 'Blocked' : (isAllowed ? 'Allowed' : 'Not allowed');
+    final statusColor =
+        isBlocked ? const Color(0xFFBA1A1A) : const Color(0xFF2E8B6B);
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black.withOpacity(0.04)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    packageName,
-                    style: GoogleFonts.manrope(
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0D1C2E),
-                    ),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withOpacity(0.04)),
+      ),
+      child: Row(
+        children: [
+          Checkbox(
+            value: isAllowed,
+            onChanged: (value) {
+              onToggle(value ?? false);
+            },
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  appName,
+                  style: GoogleFonts.manrope(
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0D1C2E),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$minutes minutes · $limitText · $hiddenText',
-                    style: GoogleFonts.manrope(
-                      fontSize: 12,
-                      color: const Color(0xFF5A6B85),
-                    ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  packageName,
+                  style: GoogleFonts.manrope(
+                    fontSize: 12,
+                    color: const Color(0xFF5A6B85),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$statusText · $limitText',
+                  style: GoogleFonts.manrope(
+                    fontSize: 12,
+                    color: statusColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-            const Icon(Icons.tune, color: Color(0xFF1A365D)),
-          ],
-        ),
+          ),
+          IconButton(
+            onPressed: onEditLimit,
+            icon: const Icon(Icons.timer, color: Color(0xFF1A365D)),
+            tooltip: 'Set time limit',
+          ),
+        ],
       ),
     );
   }
+}
+
+class _InstalledApp {
+  const _InstalledApp({required this.packageName, required this.appName});
+
+  final String packageName;
+  final String appName;
 }
 
 class _EmptyState extends StatelessWidget {
